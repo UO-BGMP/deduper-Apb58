@@ -126,7 +126,7 @@ Note, this has the added benefit of not requiring us to read all our reads into 
 
 The first read (with the lowest POS value) in each bundle will serve as the 'standard' which all other reads in the bundle are compared to ($POS_{std}$). 
 
-Starting with the next closest read in the bundle (by given SAM POS), get the CIGAR string from the 5th column and determine if the read has any soft-clipped bases. This is given by a numerical value followed by 'S' in the string, at the *start* of the string. If there are soft clipped bases, adjust the POS of that read by subtracting the number of clipped bases from that read's POS:
+Starting with the next closest read in the bundle (by given SAM POS), get the CIGAR string from the 6th column and determine if the read has any soft-clipped bases. This is given by a numerical value followed by 'S' in the string, at the *start* of the string. If there are soft clipped bases, adjust the POS of that read by subtracting the number of clipped bases from that read's POS:
 
 $$ POS_{adj} = POS - S_{clipped} $$
 If the $POS_{adj}$ is equal to the $POS_{std}$, we will assume the aligner has aligned sequences well and treat the two reads as duplicates! If the sequences do not match, move on to the next read in the bundle (next closest POS to the first read) and repeat the process.
