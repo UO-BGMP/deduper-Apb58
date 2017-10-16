@@ -46,7 +46,9 @@ The two reads will have completely different start positions! Thus, when assessi
 
 **UMIs**
 
-UMIs (Unique Molecular Identifiers) are known sequence tags that are appended onto reads to indicate the source library of the reads: a molecular barcode. We know that PCR duplicates, to be read from the same molecule of DNA, must all share the same UMI tags. However, if the UMIs have any sequencing errors or are read at poor quality, a base within the tag may be presented incorrectly. Thus, it's possible that duplicates can present with different sequences at the ends of the strands, as soft-clipped bases.
+UMIs (Unique Molecular Identifiers) are known sequence tags that are appended onto reads to indicate the source library of the reads: a molecular barcode. We know that PCR duplicates, to be read from the same molecule of DNA, must all share the same UMI tags. However, if the UMIs have any sequencing errors or are read at poor quality, a base within the tag may be presented incorrectly. Thus, it's possible that duplicates can present with different sequences at the ends of the strands.
+
+For this assignment, UMIs are assumed to be correct, and are not inline with the sequences in the sam file, but rather are included in the header of each sequence, at the end.
 
 
 ### Algorithm Design:
@@ -129,7 +131,13 @@ The first read (with the lowest POS value) in each bundle will serve as the 'sta
 Starting with the next closest read in the bundle (by given SAM POS), get the CIGAR string from the 6th column and determine if the read has any soft-clipped bases. This is given by a numerical value followed by 'S' in the string, at the *start* of the string. If there are soft clipped bases, adjust the POS of that read by subtracting the number of clipped bases from that read's POS:
 
 $$ POS_{adj} = POS - S_{clipped} $$
-If the $POS_{adj}$ is equal to the $POS_{std}$, we will assume the aligner has aligned sequences well and treat the two reads as duplicates! If the sequences do not match, move on to the next read in the bundle (next closest POS to the first read) and repeat the process.
+If the $POS_{adj}$ is equal to the $POS_{std}$, the reads will move onto the final check, to see if the UMI tags match. If the positions do not match, move on to the next read in the bundle (next closest POS to the first read) and repeat the process.
+
+
+**UMI Tag Match Check:**
+
+If two reads are found to be identical matches on alignment position (chromosome and sequence start position) the final check to determine if they are duplicates is to assess if the UMI tags match in the read headers (column 1). The UMI sequences are strings of nucleotides that are all 8 bases long included at the end of the header; when two reads are found to match position, the UMI's will be pulled from both headers and compared. If the strings match, the reads are definitive duplicates and move onto duplicate removal. If they don't match, the program moves on to compare the 'standard' read against the next read in the bundle.
+
 
 **Duplicate Removal:**
 
@@ -143,8 +151,9 @@ In the instance that a duplicate is found, We want to throw out the *first* read
 3. Read in subsequent SAM lines that have POS values = POS* +/- Untrimmed Read length
 4. Set $POS_{std}$ = POS of first read in the bundle. 
 5. Get next closest read's POS and CIGAR fields. See if any soft-clipped reads exist at 5' end. Adjust POS value by clipped reads.
-6. Compare $POS_{std}$ to $POS_{adj}$. If equal, remove the *first* instance of the duplicate read, and move to next chunk.
-7. If the clip-adjusted position does not match, begin comparison of the first read to the next read in the chunk, and repeat until duplicate is found or chunk is exhausted.
+6. Compare $POS_{std}$ to $POS_{adj}$. If equal, move onto UMI check.
+7. Compare the UMI strings of both reads from the header. If the UMIs match, remove the *first* instance of the duplicate read, and move to next chunk.
+8. If the clip-adjusted position does not match, or the UMI's do not match, begin comparison of the first read to the next read in the chunk, and repeat until duplicate is found or chunk is exhausted.
 
 #### Pseudocode:
 
@@ -161,8 +170,9 @@ In the instance that a duplicate is found, We want to throw out the *first* read
 # Checks CIGAR of each other read (for loop) and adjusts POS value if read has 
 # Soft-clipped bases at start of read (5' in context of the read)
 # Compares adjusted/unadjusted POS values of other reads against POS of reference;
-# if match, mark. At the end of the chunk, keep all non-duplicate reads, and the LAST read 
-# for any duplicates (with highest POS value)
+# if match, check if matching POS reads have matching UMIs; if these match, mark.
+# At the end of the chunk, keep all non-duplicate reads, and the LAST read 
+# for any duplicates (with highest POS value) from marked reads
 
 # Make function recursive, such that it calls itself with using the read set with 
 # the duplicates removed.
