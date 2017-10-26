@@ -3,19 +3,19 @@ title: "DeDuper Outline"
 author: "Adrian Bubie"
 date: "10/11/17"
 output:
-  pdf_document: default
   html_document: default
+  pdf_document: default
 ---
 
 ## DeDuper Program Outline
 
-Goal: Given a SAM file of uniquely mapped reads, remove all PCR duplicates sunc that there is only a single instance of each read.
+Goal: Given a SAM file of uniquely mapped reads, remove all PCR duplicates such that there is only a single instance of each read.
 
 #### Problem Description:
 
 PCR duplicates are two or more reads that come from the same molecule of DNA. We want to remove PCR duplicates because they can lead to an overrepresentation of one particular gene fragment among all our reads.
 
-Duplicates can be difficult to spot: though duplicate reads will share the same chromosome, position and strand (if non-specific) information in a SAM file following read alignment, the presence of soft-clipping and use of UMIs make it more difficult than just comparing all reads against each other and removing matches.
+Duplicates can be difficult to spot: although duplicate reads will share the same chromosome, position and strand information (if non-specific) in a SAM file following read alignment, the presence of soft-clipping and use of UMIs make it more difficult than just comparing all reads against each other and removing matches.
 
 Additional complexity comes with paired-end reads and strand specificity, but the current scope of the problem does not tackle this instance.
 

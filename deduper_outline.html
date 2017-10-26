@@ -126,11 +126,11 @@ $(document).ready(function () {
 
 <div id="deduper-program-outline" class="section level2">
 <h2>DeDuper Program Outline</h2>
-<p>Goal: Given a SAM file of uniquely mapped reads, remove all PCR duplicates sunc that there is only a single instance of each read.</p>
+<p>Goal: Given a SAM file of uniquely mapped reads, remove all PCR duplicates such that there is only a single instance of each read.</p>
 <div id="problem-description" class="section level4">
 <h4>Problem Description:</h4>
 <p>PCR duplicates are two or more reads that come from the same molecule of DNA. We want to remove PCR duplicates because they can lead to an overrepresentation of one particular gene fragment among all our reads.</p>
-<p>Duplicates can be difficult to spot: though duplicate reads will share the same chromosome, position and strand (if non-specific) information in a SAM file following read alignment, the presence of soft-clipping and use of UMIs make it more difficult than just comparing all reads against each other and removing matches.</p>
+<p>Duplicates can be difficult to spot: although duplicate reads will share the same chromosome, position and strand information (if non-specific) in a SAM file following read alignment, the presence of soft-clipping and use of UMIs make it more difficult than just comparing all reads against each other and removing matches.</p>
 <p>Additional complexity comes with paired-end reads and strand specificity, but the current scope of the problem does not tackle this instance.</p>
 <p><strong>Soft-Clipping:</strong></p>
 <p>This results from reads that only partially align against the reference sequence, such that bases at the ends of the read are considered non-aligned. This presents a problem because the SAM format starts the POS (position) count of the read at the first point of alignment.</p>
@@ -147,18 +147,17 @@ Ref:  AAATTGCGT
 R1':  AAGTTGCGA  (soft-clipping for first 3 bases)</code></pre>
 <p>The two reads will have completely different start positions! Thus, when assessing our reads for duplicates, we need to consider how to adjust for modified start positions due to soft-clipping.</p>
 <p><strong>UMIs</strong></p>
-<p>UMIs (Unique Molecular Identifiers) are known sequence tags that are appended onto reads to indicate the source library of the reads: a molecular barcode. We know that PCR duplicates, to be read from the same molecule of DNA, must all share the same UMI tags. However, if the UMIs have any sequencing errors or are read at poor quality, a base within the tag may be presented incorrectly. Thus, it’s possible that duplicates can present with different sequences at the ends of the strands, as soft-clipped bases.</p>
+<p>UMIs (Unique Molecular Identifiers) are known sequence tags that are appended onto reads to indicate the source library of the reads: a molecular barcode. We know that PCR duplicates, to be read from the same molecule of DNA, must all share the same UMI tags. However, if the UMIs have any sequencing errors or are read at poor quality, a base within the tag may be presented incorrectly. Thus, it’s possible that duplicates can present with different sequences at the ends of the strands.</p>
+<p>For this assignment, UMIs are assumed to be correct, and are not inline with the sequences in the sam file, but rather are included in the header of each sequence, at the end.</p>
 </div>
 <div id="algorithm-design" class="section level3">
 <h3>Algorithm Design:</h3>
 <p>Our first assumption is that we are starting with a uniquely mapped set of reads in SAM file format. This will be a requirement for out algorthim’s input.</p>
 <p><strong>Sorting:</strong></p>
 <p>Next, we want to sort the SAM file such that all reads are sorted by leftmost (starting) coordinates (given in the 4th column of the file format). This will require a conversion of the SAM to BAM, and then performing the sort with samtools before converting back to SAM format.</p>
-<pre class="bash"><code>&gt;$ samtools view -b [in.sam] &gt; [out.bam]
+<pre><code>&gt;$ samtools view -b [in.sam] &gt; [out.bam]
 &gt;$ samtools sort [out.bam] &gt; [out.sorted.bam]
 &gt;$ samtools view -h [out.sorted.bam] &gt; [out.sorted.sam]</code></pre>
-<pre><code>## [E::hts_open_format] fail to open file '[in.sam]'
-## samtools view: failed to open &quot;[in.sam]&quot; for reading: No such file or directory</code></pre>
 <p><strong>Position Chunking:</strong></p>
 <p>Now that our reads are all sorted by position, we want to identify possible duplicates. To make sure we account for mismatching positions due to soft-clipping, each read needs to be compared to other reads that are within a <em>read length</em> of each other:</p>
 <pre><code>R1: AGATAGA
@@ -174,41 +173,47 @@ Ref:  TGATAGATA
         |||||
 R1:   TTATAGA     Starting POS: 3</code></pre>
 <p>These two are presumably duplicates, but don’t share starting positions. We need to expand the search for possible dups up to the furthest distance that they can share alignments (which is one read length for single-end reads).</p>
-<p>This offers the ability to ‘chunk’ our search for duplicates by only considering bundles of reads that have the same POS +/- Read length. <em>This will mean the untrimmed read length of the reads being processed must be a defined argument.</em></p>
+<p>This offers the ability to ‘chunk’ our search for duplicates by only considering bundles of reads that have the same POS +/- Read length, <strong>that also are within the same chromosome</strong>. <em>This will mean the untrimmed read length of the reads being processed must be a defined argument.</em></p>
 <p>Assuming reads are 40 bp long, an example of comparative chunking:</p>
 <pre><code>QNAME                         FLAG RNAME                        POS
-K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    65 ...
-K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    77 ...
-K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    98 ...
-K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    99 ...
-K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    100 ...
-K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    131 ...
-K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    200 ...
-K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    220 ...
+K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    1 65 ...
+K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    1 77 ...
+K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    1 98 ...
+K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    1 99 ...
+K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    1 100 ...
+K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    1 131 ...
+K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    1 200 ...
+K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    1 220 ...
+K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    3 220 ...
 ...
 
 Chunk 1: 
-K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    65 ...
-K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    77 ...
-K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    98 ...
-K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    99 ...
-K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    100 ...
+K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    1 65 ...
+K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    1 77 ...
+K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    1 98 ...
+K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    1 99 ...
+K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    1 100 ...
 
 Chunk 2:
-K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    98 ...
-K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    99 ...
-K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    100 ...
-K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    131 ...
+K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    1 98 ...
+K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    1 99 ...
+K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    1 100 ...
+K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    1 131 ...
 
 Chunk 3:
-K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    200 ...
-K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    220 ...</code></pre>
+K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    1 200 ...
+K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    1 220 ...
+
+Chunk 4:
+K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    3 220 ...</code></pre>
 <p>Our program will therefore look at the position of each SAM line, then read the positions of subsequent lines until a read with a position outside the read length is found. The included reads will move onto the next step of processing and all other reads will be ignored for now.</p>
 <p>Note, this has the added benefit of not requiring us to read all our reads into memory before processing.</p>
 <p><strong>Soft Clipping Position Adjustment:</strong></p>
 <p>The first read (with the lowest POS value) in each bundle will serve as the ‘standard’ which all other reads in the bundle are compared to (<span class="math inline">\(POS_{std}\)</span>).</p>
-<p>Starting with the next closest read in the bundle (by given SAM POS), get the CIGAR string from the 5th column and determine if the read has any soft-clipped bases. This is given by a numerical value followed by ‘S’ in the string, at the <em>start</em> of the string. If there are soft clipped bases, adjust the POS of that read by subtracting the number of clipped bases from that read’s POS:</p>
-<p><span class="math display">\[ POS_{adj} = POS - S_{clipped} \]</span> If the <span class="math inline">\(POS_{adj}\)</span> is equal to the <span class="math inline">\(POS_{std}\)</span>, we will assume the aligner has aligned sequences well and treat the two reads as duplicates! If the sequences do not match, move on to the next read in the bundle (next closest POS to the first read) and repeat the process.</p>
+<p>Starting with the next closest read in the bundle (by given SAM POS), get the CIGAR string from the 6th column and determine if the read has any soft-clipped bases. This is given by a numerical value followed by ‘S’ in the string, at the <em>start</em> of the string. If there are soft clipped bases, adjust the POS of that read by subtracting the number of clipped bases from that read’s POS:</p>
+<p><span class="math display">\[ POS_{adj} = POS - S_{clipped} \]</span> If the <span class="math inline">\(POS_{adj}\)</span> is equal to the <span class="math inline">\(POS_{std}\)</span>, the reads will move onto the final check, to see if the UMI tags match. If the positions do not match, move on to the next read in the bundle (next closest POS to the first read) and repeat the process.</p>
+<p><strong>UMI Tag Match Check:</strong></p>
+<p>If two reads are found to be identical matches on alignment position (chromosome and sequence start position) the final check to determine if they are duplicates is to assess if the UMI tags match in the read headers (column 1). The UMI sequences are strings of nucleotides that are all 8 bases long included at the end of the header; when two reads are found to match position, the UMI’s will be pulled from both headers and compared. If the strings match, the reads are definitive duplicates and move onto duplicate removal. If they don’t match, the program moves on to compare the ‘standard’ read against the next read in the bundle.</p>
 <p><strong>Duplicate Removal:</strong></p>
 <p>In the instance that a duplicate is found, We want to throw out the <em>first</em> read of the duplicate pair (one with the smalled POS value). This will make sure that when we assess the next bundle of reads, we don’t miss another duplicate.</p>
 <div id="summary-of-steps" class="section level4">
@@ -216,11 +221,12 @@ K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    220 ...</cod
 <ol style="list-style-type: decimal">
 <li>Convert sam -&gt; bam, sort bam by POS, convert bam -&gt; sam</li>
 <li>Start at first read of SAM and grab POS (POS*)</li>
-<li>Read in subsequent SAM lines that have POS values = POS* +/- Untrimmed Read length</li>
+<li>Read in subsequent SAM lines that have POS values = POS* +/- Untrimmed Read length, that are within the same chromosome.</li>
 <li>Set <span class="math inline">\(POS_{std}\)</span> = POS of first read in the bundle.</li>
 <li>Get next closest read’s POS and CIGAR fields. See if any soft-clipped reads exist at 5’ end. Adjust POS value by clipped reads.</li>
-<li>Compare <span class="math inline">\(POS_{std}\)</span> to <span class="math inline">\(POS_{adj}\)</span>. If equal, remove the <em>first</em> instance of the duplicate read, and move to next chunk.</li>
-<li>If the clip-adjusted position does not match, begin comparison of the first read to the next read in the chunk, and repeat until duplicate is found or chunk is exhausted.</li>
+<li>Compare <span class="math inline">\(POS_{std}\)</span> to <span class="math inline">\(POS_{adj}\)</span>. If equal, move onto UMI check.</li>
+<li>Compare the UMI strings of both reads from the header. If the UMIs match, remove the <em>first</em> instance of the duplicate read, and move to next chunk.</li>
+<li>If the clip-adjusted position does not match, or the UMI’s do not match, begin comparison of the first read to the next read in the chunk, and repeat until duplicate is found or chunk is exhausted.</li>
 </ol>
 </div>
 <div id="pseudocode" class="section level4">
@@ -228,16 +234,21 @@ K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    220 ...</cod
 <pre class="python"><code>### Argparse arguments: take in -r (untrimmed read length) -f (sam file name)
 
 ## Function 1: Read Chunker
-# Define Function that steps through sam file; start at read 1 and read in lines until POS of line is &gt; -r
+# Define Function that steps through sam file; start at read 1 and read in lines until 
+# POS of line is &gt; -r
 
 # Function 2: Position adjuster
 # Takes output of Read Chunker as input
 # Uses POS of first read and stores it as reference
-# Checks CIGAR of each other read (for loop) and adjusts POS value if read has Soft-clipped bases at start of read (5' in context of the read)
-# Compares adjusted/unadjusted POS values of other reads against POS of reference; if match, mark.
-# At the end of the chunk, keep all non-duplicate reads, and the LAST read for any duplicates (with highest POS value)
+# Checks CIGAR of each other read (for loop) and adjusts POS value if read has 
+# Soft-clipped bases at start of read (5' in context of the read)
+# Compares adjusted/unadjusted POS values of other reads against POS of reference;
+# if match, check if matching POS reads have matching UMIs; if these match, mark.
+# At the end of the chunk, keep all non-duplicate reads, and the LAST read 
+# for any duplicates (with highest POS value) from marked reads
 
-# Make function recursive, such that it calls itself with using the read set with the duplicates removed.
+# Make function recursive, such that it calls itself with using the read set with 
+# the duplicates removed.
 
 ## Main Function:
 # Import file contents as variable
