@@ -48,7 +48,9 @@ The two reads will have completely different start positions! Thus, when assessi
 
 UMIs (Unique Molecular Identifiers) are known sequence tags that are appended onto reads to indicate the source library of the reads: a molecular barcode. We know that PCR duplicates, to be read from the same molecule of DNA, must all share the same UMI tags. However, if the UMIs have any sequencing errors or are read at poor quality, a base within the tag may be presented incorrectly. Thus, it's possible that duplicates can present with different sequences at the ends of the strands.
 
-For this assignment, UMIs are assumed to be correct, and are not inline with the sequences in the sam file, but rather are included in the header of each sequence, at the end.
+For this assignment, UMIs are provided and are not inline with the sequences in the sam file, but rather are included in the header of each sequence, at the end.
+
+Any read that has a sequencing error in the UMI is to be removed.
 
 
 ### Algorithm Design:
@@ -64,6 +66,10 @@ Next, we want to sort the SAM file such that all reads are sorted by leftmost (s
 >$ samtools sort [out.bam] > [out.sorted.bam]
 >$ samtools view -h [out.sorted.bam] > [out.sorted.sam]
 ```
+
+**UMI Check:**
+
+As a first step before checking for duplicates, the UMI at the end of the QNAME of each read is checked against a dictionary of the known UMI's (passed in as an argument). If the read has an UMI that is not in the dictionary, the read is thrown out and the next read is checked, until a read with a valid UMI is found.
 
 **Position Chunking:**
 
@@ -151,12 +157,16 @@ In the instance that a duplicate is found, We want to throw out the *first* read
 #### Summary of Steps:
 
 1. Convert sam -> bam, sort bam by POS, convert bam -> sam
-2. Start at first read of SAM and grab POS (POS*)
+2. Start at first read of SAM and check the UMI. If it's valid move to the next step; if invalid, throw out.
+3. Grab POS (POS*) of the first read.
 3. Read in subsequent SAM lines that have POS values = POS* +/- Untrimmed Read length, that are within the same chromosome.
 4. Set $POS_{std}$ = POS of first read in the bundle. 
 5. Get next closest read's POS and CIGAR fields. See if any soft-clipped reads exist at 5' end. Adjust POS value by clipped reads.
 6. Compare $POS_{std}$ to $POS_{adj}$. If equal, move onto UMI check.
 7. Compare the UMI strings of both reads from the header. If the UMIs match, remove the *first* instance of the duplicate read, and move to next chunk.
+
+   a. Potential sub step: if UMI's don't match and comparator UMI is not in dict, throw the read out from all subsequent checks.
+   
 8. If the clip-adjusted position does not match, or the UMI's do not match, begin comparison of the first read to the next read in the chunk, and repeat until duplicate is found or chunk is exhausted.
 
 #### Pseudocode:
@@ -165,8 +175,10 @@ In the instance that a duplicate is found, We want to throw out the *first* read
 ### Argparse arguments: take in -r (untrimmed read length) -f (sam file name)
 
 ## Function 1: Read Chunker
-# Define Function that steps through sam file; start at read 1 and read in lines until 
-# POS of line is > -r
+# Define Function that steps through sam file; 
+# start at read 1 and checks UMI tag to see if it's valid. If valid, continue; if not, move to next read.
+# First read with valid UMI is stored and read in lines until POS of final line is > -r
+
 
 # Function 2: Position adjuster
 # Takes output of Read Chunker as input

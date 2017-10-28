@@ -148,7 +148,8 @@ R1':  AAGTTGCGA  (soft-clipping for first 3 bases)</code></pre>
 <p>The two reads will have completely different start positions! Thus, when assessing our reads for duplicates, we need to consider how to adjust for modified start positions due to soft-clipping.</p>
 <p><strong>UMIs</strong></p>
 <p>UMIs (Unique Molecular Identifiers) are known sequence tags that are appended onto reads to indicate the source library of the reads: a molecular barcode. We know that PCR duplicates, to be read from the same molecule of DNA, must all share the same UMI tags. However, if the UMIs have any sequencing errors or are read at poor quality, a base within the tag may be presented incorrectly. Thus, it’s possible that duplicates can present with different sequences at the ends of the strands.</p>
-<p>For this assignment, UMIs are assumed to be correct, and are not inline with the sequences in the sam file, but rather are included in the header of each sequence, at the end.</p>
+<p>For this assignment, UMIs are provided and are not inline with the sequences in the sam file, but rather are included in the header of each sequence, at the end.</p>
+<p>Any read that has a sequencing error in the UMI is to be removed.</p>
 </div>
 <div id="algorithm-design" class="section level3">
 <h3>Algorithm Design:</h3>
@@ -158,6 +159,8 @@ R1':  AAGTTGCGA  (soft-clipping for first 3 bases)</code></pre>
 <pre><code>&gt;$ samtools view -b [in.sam] &gt; [out.bam]
 &gt;$ samtools sort [out.bam] &gt; [out.sorted.bam]
 &gt;$ samtools view -h [out.sorted.bam] &gt; [out.sorted.sam]</code></pre>
+<p><strong>UMI Check:</strong></p>
+<p>As a first step before checking for duplicates, the UMI at the end of the QNAME of each read is checked against a dictionary of the known UMI’s (passed in as an argument). If the read has an UMI that is not in the dictionary, the read is thrown out and the next read is checked, until a read with a valid UMI is found.</p>
 <p><strong>Position Chunking:</strong></p>
 <p>Now that our reads are all sorted by position, we want to identify possible duplicates. To make sure we account for mismatching positions due to soft-clipping, each read needs to be compared to other reads that are within a <em>read length</em> of each other:</p>
 <pre><code>R1: AGATAGA
@@ -220,12 +223,18 @@ K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    3 220 ...</c
 <h4>Summary of Steps:</h4>
 <ol style="list-style-type: decimal">
 <li>Convert sam -&gt; bam, sort bam by POS, convert bam -&gt; sam</li>
-<li>Start at first read of SAM and grab POS (POS*)</li>
+<li>Start at first read of SAM and check the UMI. If it’s valid move to the next step; if invalid, throw out.</li>
+<li>Grab POS (POS*) of the first read.</li>
 <li>Read in subsequent SAM lines that have POS values = POS* +/- Untrimmed Read length, that are within the same chromosome.</li>
 <li>Set <span class="math inline">\(POS_{std}\)</span> = POS of first read in the bundle.</li>
 <li>Get next closest read’s POS and CIGAR fields. See if any soft-clipped reads exist at 5’ end. Adjust POS value by clipped reads.</li>
 <li>Compare <span class="math inline">\(POS_{std}\)</span> to <span class="math inline">\(POS_{adj}\)</span>. If equal, move onto UMI check.</li>
 <li>Compare the UMI strings of both reads from the header. If the UMIs match, remove the <em>first</em> instance of the duplicate read, and move to next chunk.</li>
+</ol>
+<ol style="list-style-type: lower-alpha">
+<li>Potential sub step: if UMI’s don’t match and comparator UMI is not in dict, throw the read out from all subsequent checks.</li>
+</ol>
+<ol start="8" style="list-style-type: decimal">
 <li>If the clip-adjusted position does not match, or the UMI’s do not match, begin comparison of the first read to the next read in the chunk, and repeat until duplicate is found or chunk is exhausted.</li>
 </ol>
 </div>
@@ -234,8 +243,10 @@ K00337:83:HJKJNBBXX:...:17333   83  CM001001.2/15519711-15520261    3 220 ...</c
 <pre class="python"><code>### Argparse arguments: take in -r (untrimmed read length) -f (sam file name)
 
 ## Function 1: Read Chunker
-# Define Function that steps through sam file; start at read 1 and read in lines until 
-# POS of line is &gt; -r
+# Define Function that steps through sam file; 
+# start at read 1 and checks UMI tag to see if it's valid. If valid, continue; if not, move to next read.
+# First read with valid UMI is stored and read in lines until POS of final line is &gt; -r
+
 
 # Function 2: Position adjuster
 # Takes output of Read Chunker as input
