@@ -134,6 +134,10 @@ Our program will therefore look at the position of each SAM line, then read the 
 
 Note, this has the added benefit of not requiring us to read all our reads into memory before processing.
 
+**Strand Check:**
+
+We only want to compare reads that are both mapped and have the same strand as one-another (forward or reverse, "+/-"). We do this by checking the bitwise flag (FLAG) field of the read in the sam file. Once we have a bundle of reads, check that each read in the bundle is mapped and is of the same strand orientation as the first read (reference read) in the bundle. If the read is either unmapped or is of the opposite orientation, that read will skipped for softclipping checks.
+
 **Soft Clipping Position Adjustment:**
 
 The first read (with the lowest POS value) in each bundle will serve as the 'standard' which all other reads in the bundle are compared to ($POS_{std}$). 
@@ -161,13 +165,14 @@ In the instance that a duplicate is found, We want to throw out the *first* read
 3. Grab POS (POS*) of the first read.
 3. Read in subsequent SAM lines that have POS values = POS* +/- Untrimmed Read length, that are within the same chromosome.
 4. Set $POS_{std}$ = POS of first read in the bundle. 
-5. Get next closest read's POS and CIGAR fields. See if any soft-clipped reads exist at 5' end. Adjust POS value by clipped reads.
-6. Compare $POS_{std}$ to $POS_{adj}$. If equal, move onto UMI check.
-7. Compare the UMI strings of both reads from the header. If the UMIs match, remove the *first* instance of the duplicate read, and move to next chunk.
+5. Get next closest read's POS, FLAG, and CIGAR fields. Check to make sure the read is mapped and that the strand orientation is the same as the reference strand.
+6. See if any soft-clipped reads exist at 5' end. Adjust POS value by clipped reads.
+7. Compare $POS_{std}$ to $POS_{adj}$. If equal, move onto UMI check.
+8. Compare the UMI strings of both reads from the header. If the UMIs match, remove the *first* instance of the duplicate read, and move to next chunk.
 
    a. Potential sub step: if UMI's don't match and comparator UMI is not in dict, throw the read out from all subsequent checks.
    
-8. If the clip-adjusted position does not match, or the UMI's do not match, begin comparison of the first read to the next read in the chunk, and repeat until duplicate is found or chunk is exhausted.
+9. If the clip-adjusted position does not match, or the UMI's do not match, begin comparison of the first read to the next read in the chunk, and repeat until duplicate is found or chunk is exhausted.
 
 #### Pseudocode:
 
