@@ -19,7 +19,7 @@ def get_arguments():
     '''))
     parser.add_argument("-f", help="Sorted SAM file to be processed. Must include absolute path the file. <str>", required=True, type=str)
     parser.add_argument("-p", help="If passed as 'True', SAM data is considered paired-ended. <boolean> (def=False)", required=False, type=bool, default=False)
-    parser.add_argument("-umi", help="Optional file to define UMI sequences. If not specified, SAM is assumed to use randomers. Must include absolute path to file <str>", required=False, type=str, default='')
+    parser.add_argument("-umi", help="Optional file to define UMI sequences (one UMI per line). UMIs are assumed to be in the last field of the QNAME for each read. Reads with invalid UMIs are filtered from final output. If file not specified, SAM is assumed to use randomers. Must include absolute path to file <str>", required=False, type=str, default='')
     parser.add_argument("-dup_keep", help="Optional argument to designate which read to keep of a duplicate set. 'Q' will keep read with highest quality score, 'F' will keep the first read encountered. No specification will choose a random read. <str>", required=False, type=str, default='')
     #parser.add_argument("-s", help="Set to 'True' for additional summary file output <boolean> (def='False')")
     #parser.add_argument("-h","--help", help="Show this message and exit", required=False, type=str)
@@ -148,11 +148,13 @@ def read_chunker(line, umis, dup_keep, paired, out_file):
     chunk.append(read1.raw) #Add in first read
 
     while read1: # Until the end of the file
+
         read2 = SAM.readline() # Read in the next line of the SAM
         if read2 == '':
             break
         
         read2 = Read(read2) # create Read object from read2
+
         while read2.pos <= read1.pos+r_len and read2.chr == read1.chr: # Check to see if the position of the next read is within the first read's position + read length, then add it to the chunk
             # If umis passed in, only add reads if they have a valid umi:
             if umis != []:
@@ -183,21 +185,31 @@ def read_chunker(line, umis, dup_keep, paired, out_file):
         while len(chunk) > 1 and read1.pos+r_len < read2.pos:
             chunk = dedup_chunk(chunk, dup_keep, paired)
             with open(out_file,'a') as out:
-                out.write(chunk[0])
+                if umis != [] and Read(chunk[0]).tag in umis:
+                    out.write(chunk[0])
+                elif umis == []:
+                    out.write(chunk[0])
 
             read1 = Read(chunk[1])
             chunk = chunk[1:]
 
         if len(chunk) == 1: # reset the chunk when there is only one read in the list left
             with open(out_file,'a') as out:
-                out.write(chunk[0])
+                if umis != [] and Read(chunk[0]).tag in umis:
+                    out.write(chunk[0])
+                elif umis == []:
+                    out.write(chunk[0])
 
             chunk = []
             chunk.append(read2.raw)
             read1 = Read(chunk[0])
 
     with open(out_file,'a') as out: 
-        out.write(read1.raw)   # This additional write is required to catch the final, non-empty read of the file if it is not otherwise captured in a chunk.
+        if read1 != '':
+            if umis != [] and read1.tag in umis:
+                out.write(read1.raw)   # This additional write is required to catch the final, non-empty read of the file if it is not otherwise captured in a chunk.
+            elif umis == []:
+                out.write(read1.raw)
 
 
 
