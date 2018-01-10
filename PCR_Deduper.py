@@ -30,17 +30,20 @@ args = get_arguments()
 class Read:
     """ Read object: object called to get read parts from SAM file lines, or change attributes """
     def __init__(self, line):
-        self.pos = int(line.split('\t')[3])
         self.chr = line.split('\t')[2]
         self.flag = int(line.split('\t')[1])
         self.tag = line.split('\t')[0].split(':')[-1]
         self.seq = line.split('\t')[9]
         self.cig = line.split('\t')[5]
+
+        if 'S' in self.cig and self.cig.find('S')+1 < len(self.cig): # If the read is softclipped on the 5'-end (given by CIGAR) we need to adjust the position
+            adj = int(self.cig[:self.cig.find('S')])
+            self.pos = int(line.split('\t')[3])-adj # Set the position with the adjusted value
+        else:
+            self.pos = int(line.split('\t')[3]) # No soft-clipping on 5'-end, keep the value of the POS column.
+
         self.qual = int(line.split('\t')[4])
         self.raw = line
-
-    def adj_pos(self, adj):
-        self.pos = self.pos-adj
 
 
 def umi_list(umi_file):
@@ -62,13 +65,13 @@ def flag_stat(flag, paired):
     return strand
 
     # If the file is specified as paired-ended:
-    if paired == True:
-        if (flag & 40) == 40 and (flag & 80) != 80:
-            pair = 1
-        elif (flag & 40) != 40 and (flag & 80) == 80:
-            pair = 2
+    #if paired == True:
+    #    if (flag & 40) == 40 and (flag & 80) != 80:
+    #        pair = 1
+    #    elif (flag & 40) != 40 and (flag & 80) == 80:
+    #        pair = 2
 
-        return pair
+    #    return pair
 
 
 def dup_remover(reads, dups, dup_keep):
@@ -112,10 +115,6 @@ def dedup_chunk(chunk, dup_keep, paired):
     for i in range(1,len(chunk)):
         pos_dup = Read(chunk[i])
         if flag_stat(r_std.flag, paired) == flag_stat(pos_dup.flag, paired): #First check if the reads have the same strand
-            if 'S' in pos_dup.cig and pos_dup.cig.find('S')+1 < len(pos_dup.cig): #determing if there is soft-clipping at the 5'-end such that the pos has to be adjusted
-                adj = int(pos_dup.cig[:pos_dup.cig.find('S')]) # get value to adjust by
-                pos_dup.adj_pos(adj)
-
             if pos_dup.pos == r_std.pos and pos_dup.tag == r_std.tag: #If tag (UMI/randomer) and positions match for reads:
                 dups.append(pos_dup.raw)
     
@@ -278,7 +277,7 @@ if args.p == True:
     raise ValueError('Cannot Currently Process Paired reads. Please do not specify flag at this time')
 
 if args.dup_keep not in ['Q','R','']:
-    raise ValueError('Duplicate Keep argument is not valid, must use "Q", "F", or ""')
+    raise ValueError('Duplicate Keep argument is not valid, must use "Q", "R", or ""')
 
 # If UMI file given, create list of tags; otherwise, leave it as an empty list:
 umis = []
