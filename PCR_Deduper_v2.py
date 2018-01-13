@@ -44,7 +44,7 @@ class Read:
         self.qual = int(line.split('\t')[4]) # Get the quality score of the read
         self.strand = flag_stat(self.flag) # Call the bitwise flag checker and get the strand of the read
 
-        self.chars = [str(self.chr),str(self.tag),str(self.strand),str(self.pos)] # Create read true characteristics list
+        self.chars = [str(self.tag),str(self.strand),str(self.chr),str(self.pos)] # Create read true characteristics list
 
         self.raw = line # Keep copy of the input line
 
@@ -110,7 +110,7 @@ def sort_by_true(file_in):
                 i += 1
                 reads_proc += 1
 
-            sortee = sorted(to_sort, key=lambda read: int(read[-1].strip('\n'))) # Sort the reads based on the true position (last item in each list)
+            sortee = sorted(sorted(to_sort, key=lambda read: int(read[-1].strip('\n'))), key=lambda read: int(read[-2].strip('\t'))) # Sort the reads based on the true position (last 2 items in each list)
 
             for i in range(0,len(sortee)):
                 sortee[i] = ':'.join(sortee[i]) # Mend each read back together
