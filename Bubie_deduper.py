@@ -57,9 +57,7 @@ def umi_list(umi_file):
 
 
 def flag_stat(flag):
-    '''Bitwise flag checker: checks read flag and returns the strand of the read. 
-    If the paired-end argument passed as True, which read in the pair the read is 
-    checked and returned.'''
+    '''Bitwise flag checker: checks read flag and returns the strand of the read.'''
 
     strand = '+'
     if (flag & 16) == 16: # Check strand:
